@@ -1,3 +1,14 @@
+
+# Gentoo setup
+```
+virtualenv -p python3.6 env
+source env/bin/activate
+pip install -r requirements-dev.txt
+DEBUG=1 chalice local --autoreload  --port 30002
+```
+
+# OLD stuff:
+
 [![Build Status](https://travis-ci.org/lambda-lint/github-webhook-lambda.svg?branch=master)](https://travis-ci.org/lambda-lint/github-webhook-lambda)
 [![Coverage Status](https://codecov.io/gh/lambda-lint/github-webhook-lambda/branch/master/graph/badge.svg)](https://codecov.io/gh/lambda-lint/github-webhook-lambda)
 
