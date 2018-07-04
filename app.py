@@ -10,15 +10,18 @@ Local:
 Push GitHub Webhooks to some storage
 """
 
+# core
+import base64
+import datetime
+import gzip
 import hashlib
 import hmac
 import json
 import os
 import re
-import datetime
-import os
 from ipaddress import ip_address, ip_network
 
+# installed
 import boto3
 from chalice import BadRequestError, Chalice, UnauthorizedError
 
@@ -40,7 +43,7 @@ CONFIG = {
     # Whitelist of source IPs for request. Either IP or URLs supported (to
     # allow dynamic fetch).
     'SRC_IP_WHITELIST': os.environ.get('SRC_IP_WHITELIST', DEFAULTS['SRC_IP_WHITELIST']),
-    'TOPIC_FORMAT': os.environ.get('TOPIC_FORMAT'),
+    'TOPIC_FORMAT': os.environ.get('TOPIC_FORMAT', DEFAULTS['TOPIC_FORMAT']),
 }
 
 if isinstance(CONFIG['HASHLIB_BLACKLIST'], str):
@@ -100,14 +103,25 @@ def index(integration):
     validate_signature(request)
     validate_source(request)
     # TODO:detect Local vs WS
-    return local_index(integration)
-    #return aws_index(integration)
+    (ar, lr) = (None, None)
+    # TODO: make sure we push errors back up to GitHub
+    lr = local_index(integration)
+    #ar = aws_index(integration)
+    return [ar, lr]
+
+def logging_payload(request):
+    return {
+            'json': request.json_body,
+            'raw,base64+gzip': base64.encodestring(gzip.compress(request.raw_body)).decode('ascii'),
+            'headers': dict(request.headers),
+            'context': request.context,
+            }
 
 def local_index(integration):
     request = app.current_request
-    # TODO: write HTTP headers _and_ JSON blob to disk
     # TODO: add stdout+stderr keys to return for debugging
-    d = datetime.datetime.today()
+    d = datetime.datetime.utcnow()
+    epoch = d.timestamp()
     fn = '/tmp/json/{year}/{year}-{month}/{year}-{month}-{day}/'.format(
             year=d.year,
             month=('%02d' % d.month),
@@ -115,9 +129,9 @@ def local_index(integration):
             )
     if not os.path.isdir(fn):
         os.makedirs(fn)
-    fn = os.path.join(fn, request.headers['X-GitHub-Delivery'])
+    fn = os.path.join(fn, '.'.join([request.headers['X-GitHub-Delivery'], str(epoch), 'json']))
     with open(fn, "a") as f:
-        f.write(json.dumps(request.json_body))
+        f.write(json.dumps(logging_payload(request)))
     return {'Code': 'Ok', 'Message': 'Webhook received.'}
 
 def aws_index(integration):
@@ -135,15 +149,15 @@ def aws_index(integration):
 
     # TODO: Yep, this is a sec vuln
     # But we need some way to configure the topic better
-    topic = CONFIG_TOPIC_FORMAT.format(**vars()) 
+    topic = CONFIG['TOPIC_FORMAT'].format(**vars())
     if topic not in topic_arns.keys():
         topic_arns[topic] = SNS.create_topic(Name=topic)['TopicArn']
 
-    # TODO: add HTTP headers
     SNS.publish(
         TargetArn=topic_arns[topic],
         Subject=event,
-        Message=json.dumps({'default': json.dumps(request.json_body)}),
+        #Message=json.dumps({'default': json.dumps(request.json_body)}),
+        Message=json.dumps({'default': json.dumps(logging_payload(request))}),
         MessageStructure='json'
     )
 
