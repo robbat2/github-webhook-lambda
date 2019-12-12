@@ -15,17 +15,17 @@ from chalice import BadRequestError, Chalice, UnauthorizedError
 
 DEFAULT_HASHLIB_BLACKLIST = 'CRC32,CRC32C,MD4,MD5,MDC2'
 
-def get_config_HASHLIB_BLACKLIST(envstr=None):
+
+def parse_hashlib_blacklist(envstr):
     """Helper to load CONFIG['HASHLIB_BLACKLIST']"""
-    if envstr is None:
-        envstr = os.environ.get('HASHLIB_BLACKLIST', DEFAULT_HASHLIB_BLACKLIST)
     return set(map(lambda s: s.strip().lower(), envstr.split(',')))
+
 
 CONFIG = {
     'DEBUG': os.environ.get('DEBUG', '') in [1, '1', 'True', 'true'],
     'SECRET': os.environ.get('SECRET'),
     'S3_REGION': os.environ.get('S3_REGION', 'eu-west-1'),
-    'HASHLIB_BLACKLIST': get_config_HASHLIB_BLACKLIST(),
+    'HASHLIB_BLACKLIST': parse_hashlib_blacklist(os.getenv('HASHLIB_BLACKLIST', DEFAULT_HASHLIB_BLACKLIST)),
 }
 
 app = Chalice(app_name='github-webhooks')
@@ -52,6 +52,7 @@ def validate_signature(request):
         .hexdigest()
     if not hmac.compare_digest(digest.encode(), hashval.encode('utf-8')):
         raise UnauthorizedError('X-Hub-Signature mismatch')
+
 
 @app.route('/{integration}', methods=['POST'])
 def index(integration):

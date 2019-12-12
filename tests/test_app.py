@@ -7,7 +7,7 @@ from botocore.stub import Stubber
 from chalice import BadRequestError
 from chalice import UnauthorizedError
 
-from app import app, index, CONFIG, SNS, get_config_HASHLIB_BLACKLIST
+from app import app, index, CONFIG, SNS, parse_hashlib_blacklist, DEFAULT_HASHLIB_BLACKLIST
 
 TEST_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -29,12 +29,12 @@ class TestApp(object):
         CONFIG['SECRET'] = None
 
     def test_blacklist_default(self):
-        assert get_config_HASHLIB_BLACKLIST(envstr=None) \
-                == set(['crc32', 'crc32c', 'md4', 'md5', 'mdc2'])
+        assert parse_hashlib_blacklist(DEFAULT_HASHLIB_BLACKLIST) \
+               == set(['crc32', 'crc32c', 'md4', 'md5', 'mdc2'])
 
     def test_blacklist_custom(self):
-        assert get_config_HASHLIB_BLACKLIST(envstr='SHA1,POLY1305-HMAC,INVENTED') \
-                == set(['invented', 'sha1', 'poly1305-hmac'])
+        assert parse_hashlib_blacklist('SHA1,POLY1305-HMAC,INVENTED') \
+               == set(['invented', 'sha1', 'poly1305-hmac'])
 
     def test_no_secret(self):
         app.current_request = Request(push, {
@@ -98,7 +98,7 @@ class TestApp(object):
         CONFIG['SECRET'] = 'very-secret'
         app.current_request = Request(push, {
             'X-GitHub-Event': 'push',
-            'X-Hub-Signature': 'sha=whatever',
+            'X-Hub-Signature': 'sha1=whatever',
             'X-GitHub-Delivery': uuid.uuid4().hex,
         })
 
